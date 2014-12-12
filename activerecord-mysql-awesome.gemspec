@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.version       = ActiveRecord::Mysql::Awesome::VERSION
   spec.authors       = ["Ryuta Kamizono"]
   spec.email         = ["kamipo@gmail.com"]
-  spec.summary       = %q{Awecome patches backported for ActiveRecord MySQL adapters}
-  spec.description   = %q{Awecome patches backported for ActiveRecord MySQL adapters}
+  spec.summary       = %q{Awesome patches backported for ActiveRecord MySQL adapters}
+  spec.description   = %q{Awesome patches backported for ActiveRecord MySQL adapters}
   spec.homepage      = "https://github.com/kamipo/activerecord-mysql-awesome"
   spec.license       = "MIT"
 
