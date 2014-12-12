@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/kamipo/activerecord-mysql-awesome.png?branch=master)](https://travis-ci.org/kamipo/activerecord-mysql-awesome)
 
-Awecome patches backported for ActiveRecord MySQL adapters.
+Awesome patches backported for ActiveRecord MySQL adapters.
 
 ## Installation
 
