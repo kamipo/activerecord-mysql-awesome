@@ -1,0 +1,1 @@
+require 'activerecord/mysql/awesome'
