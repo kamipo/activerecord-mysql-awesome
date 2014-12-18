@@ -1,8 +1,138 @@
 require 'active_record/connection_adapters/abstract_mysql_adapter'
 
 module ActiveRecord
+  module Mysql
+    module Awesome
+      def type_to_sql(type, limit = nil, precision = nil, scale = nil, unsigned = false)
+        case type.to_s
+        when 'integer'
+          case limit
+          when nil, 4, 11; 'int'  # compatibility with MySQL default
+          else
+            super(type, limit, precision, scale)
+          end.tap do |sql_type|
+            sql_type << ' unsigned' if unsigned
+          end
+        when 'float', 'decimal'
+          super(type, limit, precision, scale).tap do |sql_type|
+            sql_type << ' unsigned' if unsigned
+          end
+        when 'primary_key'
+          "#{type_to_sql(:integer, limit, precision, scale, unsigned)} auto_increment PRIMARY KEY"
+        when 'datetime', 'time'
+          return super(type, limit, precision, scale) unless precision
+
+          native_type = native_database_types[type.to_sym][:name]
+          case precision
+          when 0..6; "#{native_type}(#{precision})"
+          else raise(ActiveRecordError, "No #{native_type} type has precision of #{precision}. The allowed range of precision is from 0 to 6")
+          end
+        else
+          super(type, limit, precision, scale)
+        end
+      end
+
+      module Column
+        def unsigned?
+          sql_type =~ /unsigned/i
+        end
+      end
+
+      if ActiveRecord::VERSION::STRING < "4.2.0"
+        def quote(value, column = nil) #:nodoc:
+          return super unless column && column.type
+
+          case column.type
+          when :datetime, :time
+            if value.acts_like?(:time) && value.respond_to?(:usec)
+              zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
+              result = value.send(zone_conversion_method).to_s(:db)
+              precision = column.precision
+              case precision
+              when 1..6
+                "'#{result}.#{sprintf("%0#{precision}d", value.usec / 10**(6 - precision))}'"
+              when 0, nil
+                "'#{result}'"
+              end
+            else
+              super
+            end
+          else
+            super
+          end
+        end
+
+        module Column
+          def extract_limit(sql_type)
+            case sql_type
+            when /^(?:date)?time/i; nil
+            else
+              super
+            end
+          end
+
+          def extract_precision(sql_type)
+            case sql_type
+            when /^(?:date)?time/i
+              $1.to_i if sql_type =~ /\((\d+)(,\d+)?\)/
+            else
+              super
+            end
+          end
+        end
+      else
+        protected
+
+        def initialize_type_map(m) # :nodoc:
+          super
+          register_class_with_precision m, %r(time)i,     MysqlTime
+          register_class_with_precision m, %r(datetime)i, MysqlDateTime
+        end
+
+        def register_class_with_precision(mapping, key, klass) # :nodoc:
+          mapping.register_type(key) do |*args|
+            precision = extract_precision(args.last)
+            klass.new(precision: precision)
+          end
+        end
+
+        private
+
+        module TimeValueWithPrecision
+          def type_cast_for_database(value)
+            if value.acts_like?(:time) && value.respond_to?(:usec)
+              zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
+              result = value.send(zone_conversion_method).to_s(:db)
+              case precision
+              when 1..6
+                "#{result}.#{sprintf("%0#{precision}d", value.usec / 10**(6 - precision))}"
+              when 0, nil
+                result
+              end
+            else
+              super
+            end
+          end
+        end
+
+        class MysqlTime < Type::Time # :nodoc:
+          include TimeValueWithPrecision
+        end
+
+        class MysqlDateTime < Type::DateTime # :nodoc:
+          include TimeValueWithPrecision
+        end
+      end
+    end
+  end
+
   module ConnectionAdapters
     class AbstractMysqlAdapter < AbstractAdapter
+      prepend Mysql::Awesome
+
+      class Column < ConnectionAdapters::Column # :nodoc:
+        prepend Mysql::Awesome::Column
+      end
 
       class ChangeColumnDefinition < Struct.new(:column, :name) #:nodoc:
       end
@@ -95,12 +225,6 @@ module ActiveRecord
         end
       end
 
-      class Column < ConnectionAdapters::Column # :nodoc:
-        def unsigned?
-          sql_type =~ /unsigned/i
-        end
-      end
-
       def options_for_column_spec(table_name)
         if collation = select_one("SHOW TABLE STATUS LIKE '#{table_name}'")["Collation"]
           super.merge(collation: collation)
@@ -130,28 +254,6 @@ module ActiveRecord
 
         # strip AUTO_INCREMENT
         raw_table_options.sub(/(ENGINE=\w+)(?: AUTO_INCREMENT=\d+)/, '\1')
-      end
-
-      alias type_to_sql_without_awesome type_to_sql
-      def type_to_sql(type, limit = nil, precision = nil, scale = nil, unsigned = false)
-        case type.to_s
-        when 'integer'
-          case limit
-          when nil, 4, 11; 'int'  # compatibility with MySQL default
-          else
-            type_to_sql_without_awesome(type, limit, precision, scale)
-          end.tap do |sql_type|
-            sql_type << ' unsigned' if unsigned
-          end
-        when 'float', 'decimal'
-          type_to_sql_without_awesome(type, limit, precision, scale).tap do |sql_type|
-            sql_type << ' unsigned' if unsigned
-          end
-        when 'primary_key'
-          "#{type_to_sql(:integer, limit, precision, scale, unsigned)} auto_increment PRIMARY KEY"
-        else
-          type_to_sql_without_awesome(type, limit, precision, scale)
-        end
       end
 
       def add_column_sql(table_name, column_name, type, options = {})
