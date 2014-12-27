@@ -47,7 +47,7 @@ class CharsetCollationTest < ActiveRecord::TestCase
 
   def test_schema_dump_column_collation
     schema = dump_table_schema "charset_collations"
-    assert_match %r{t.string\s+"string_ascii_bin",\s+limit: 255,\s+collation: "ascii_bin"$}, schema
-    assert_match %r{t.text\s+"text_ucs2_unicode_ci",\s+limit: 65535,\s+collation: "ucs2_unicode_ci"$}, schema
+    assert_match %r{t.string\s+"string_ascii_bin",(?:\s+limit: 255,)?\s+collation: "ascii_bin"$}, schema
+    assert_match %r{t.text\s+"text_ucs2_unicode_ci",(?:\s+limit: 65535,)?\s+collation: "ucs2_unicode_ci"$}, schema
   end
 end

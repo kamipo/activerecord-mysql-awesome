@@ -22,7 +22,7 @@ class UnsignedTypeTest < ActiveRecord::TestCase
   end
 
   def test_minus_value_is_out_of_range
-    assert_raise(RangeError) do
+    assert_raise(ActiveRecord::StatementInvalid, RangeError) do
       UnsignedType.create(unsigned_integer: -10)
     end
     assert_raise(ActiveRecord::StatementInvalid) do
@@ -35,8 +35,8 @@ class UnsignedTypeTest < ActiveRecord::TestCase
 
   def test_schema_dump_includes_unsigned_option
     schema = dump_table_schema "unsigned_types"
-    assert_match %r{t.integer\s+"unsigned_integer",\s+limit: 4,\s+unsigned: true$}, schema
-    assert_match %r{t.float\s+"unsigned_float",\s+limit: 24,\s+unsigned: true$}, schema
+    assert_match %r{t.integer\s+"unsigned_integer",(?:\s+limit: 4,)?\s+unsigned: true$}, schema
+    assert_match %r{t.float\s+"unsigned_float",(?:\s+limit: 24,)?\s+unsigned: true$}, schema
     assert_match %r{t.decimal\s+"unsigned_decimal",\s+precision: 10,\s+scale: 2,\s+unsigned: true$}, schema
   end
 end

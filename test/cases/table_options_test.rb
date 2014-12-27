@@ -11,6 +11,6 @@ class TableOptionsTest < ActiveRecord::TestCase
   def test_dump_table_options
     ActiveRecord::Base.connection.create_table(:table_options, force: true, options: "COMMENT 'london bridge is falling down'")
     output = dump_table_schema("table_options")
-    assert_match %r/COMMENT='london bridge is falling down'/, output
+    assert_match %r{COMMENT='london bridge is falling down'}, output
   end
 end
