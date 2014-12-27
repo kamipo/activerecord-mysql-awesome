@@ -23,7 +23,7 @@ class StrictModeTest < ActiveRecord::TestCase
     end
   end
 
- def test_mysql_strict_mode_disabled
+  def test_mysql_strict_mode_disabled
     run_without_connection do |orig_connection|
       ActiveRecord::Base.establish_connection(orig_connection.merge({strict: false}))
       result = ActiveRecord::Base.connection.exec_query "SELECT @@SESSION.sql_mode"
