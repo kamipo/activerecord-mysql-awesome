@@ -17,9 +17,9 @@ class PrimaryKeyBigIntTest < ActiveRecord::TestCase
   end
 
   test "primary key column type with bigint" do
-    column_type = Widget.type_for_attribute(Widget.primary_key)
-    assert_equal :integer, column_type.type
-    assert_equal 8, column_type.limit
+    column = Widget.columns_hash[Widget.primary_key]
+    assert_equal :integer, column.type
+    assert_equal 8, column.limit
   end
 
   test "primary key with bigint are automatically numbered" do
