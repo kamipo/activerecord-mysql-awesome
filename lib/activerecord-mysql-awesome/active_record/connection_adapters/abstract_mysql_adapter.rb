@@ -4,18 +4,13 @@ module ActiveRecord
   module Mysql
     module Awesome
       def type_to_sql(type, limit = nil, precision = nil, scale = nil, unsigned = false)
+        return "#{type_to_sql(type, limit, precision, scale)} unsigned" if unsigned && type != :primary_key
         case type.to_s
         when 'integer'
           case limit
           when nil, 4, 11; 'int'  # compatibility with MySQL default
           else
             super(type, limit, precision, scale)
-          end.tap do |sql_type|
-            sql_type << ' unsigned' if unsigned
-          end
-        when 'float', 'decimal'
-          super(type, limit, precision, scale).tap do |sql_type|
-            sql_type << ' unsigned' if unsigned
           end
         when 'primary_key'
           "#{type_to_sql(:integer, limit, precision, scale, unsigned)} auto_increment PRIMARY KEY"
@@ -54,12 +49,13 @@ module ActiveRecord
           when :datetime, :time
             if value.acts_like?(:time) && value.respond_to?(:usec)
               zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
-              result = value.send(zone_conversion_method).to_s(:db)
+              value = value.send(zone_conversion_method) if value.respond_to?(zone_conversion_method)
+              result = value.to_s(:db)
               precision = column.precision
               case precision
               when 1..6
                 "'#{result}.#{sprintf("%0#{precision}d", value.usec / 10**(6 - precision))}'"
-              when 0, nil
+              else
                 "'#{result}'"
               end
             else
@@ -110,11 +106,12 @@ module ActiveRecord
           def type_cast_for_database(value)
             if value.acts_like?(:time) && value.respond_to?(:usec)
               zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
-              result = value.send(zone_conversion_method).to_s(:db)
+              value = value.send(zone_conversion_method) if value.respond_to?(zone_conversion_method)
+              result = value.to_s(:db)
               case precision
               when 1..6
                 "#{result}.#{sprintf("%0#{precision}d", value.usec / 10**(6 - precision))}"
-              when 0, nil
+              else
                 result
               end
             else
@@ -172,7 +169,7 @@ module ActiveRecord
         private
 
         def create_column_definition(name, type)
-          ColumnDefinition.new name, type
+          ColumnDefinition.new(name, type)
         end
       end
 
@@ -229,7 +226,7 @@ module ActiveRecord
         end
 
         def type_to_sql(type, limit, precision, scale, unsigned = false)
-          @conn.type_to_sql type.to_sym, limit, precision, scale, unsigned
+          @conn.type_to_sql(type.to_sym, limit, precision, scale, unsigned)
         end
 
         def quote_value(value, column)
@@ -300,7 +297,7 @@ module ActiveRecord
 
         td = create_table_definition(table_name)
         cd = td.new_column_definition(column.name, type, options)
-        schema_creation.accept ChangeColumnDefinition.new cd, column.name
+        schema_creation.accept(ChangeColumnDefinition.new(cd, column.name))
       end
 
       def rename_column_sql(table_name, column_name, new_column_name)
@@ -314,7 +311,7 @@ module ActiveRecord
         current_type = select_one("SHOW COLUMNS FROM #{quote_table_name(table_name)} LIKE '#{column_name}'", 'SCHEMA')["Type"]
         td = create_table_definition(table_name)
         cd = td.new_column_definition(new_column_name, current_type, options)
-        schema_creation.accept ChangeColumnDefinition.new cd, column.name
+        schema_creation.accept(ChangeColumnDefinition.new(cd, column.name))
       end
 
       alias configure_connection_without_awesome configure_connection
@@ -329,7 +326,7 @@ module ActiveRecord
       end
 
       def create_table_definition(name, temporary = false, options = nil, as = nil) # :nodoc:
-        TableDefinition.new native_database_types, name, temporary, options, as
+        TableDefinition.new(native_database_types, name, temporary, options, as)
       end
     end
   end
