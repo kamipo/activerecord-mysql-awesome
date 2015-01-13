@@ -5,8 +5,8 @@ rvm:
   - 2.2
   - ruby-head
 env:
-  - "AR_VERSION=4.0.12"
-  - "AR_VERSION=4.1.8"
+  - "AR_VERSION=4.0.13"
+  - "AR_VERSION=4.1.9"
   - "AR_VERSION=4.2.0"
 before_install:
   - mysql -e "create database activerecord_unittest;"
