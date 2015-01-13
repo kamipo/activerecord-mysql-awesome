@@ -1,6 +1,9 @@
 require 'cases/helper'
+require 'support/schema_dumping_helper'
 
 class PrimaryKeyBigIntTest < ActiveRecord::TestCase
+  include SchemaDumpingHelper
+
   class Widget < ActiveRecord::Base
   end
 
@@ -22,5 +25,10 @@ class PrimaryKeyBigIntTest < ActiveRecord::TestCase
   test "primary key with bigint are automatically numbered" do
     widget = Widget.create!
     assert_not_nil widget.id
+  end
+
+  test "schema dump primary key with bigint" do
+    schema = dump_table_schema "widgets"
+    assert_match %r{create_table "widgets", id: :bigint}, schema
   end
 end

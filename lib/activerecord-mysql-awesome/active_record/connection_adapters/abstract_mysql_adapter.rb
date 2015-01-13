@@ -36,6 +36,14 @@ module ActiveRecord
         def unsigned?
           sql_type =~ /unsigned/i
         end
+
+        def bigint?
+          sql_type =~ /bigint/i
+        end
+
+        def auto_increment?
+          extra == 'auto_increment'
+        end
       end
 
       if ActiveRecord::VERSION::STRING < "4.2.0"
@@ -238,6 +246,18 @@ module ActiveRecord
         end
       end
 
+      def column_spec_for_primary_key(column, options)
+        spec = {}
+        if column.auto_increment?
+          return unless column.bigint?
+          spec[:id] = ':bigint'
+        else
+          spec[:id] = column.type.inspect
+          spec.merge!(prepare_column_options(column, options).delete_if { |key, _| [:name, :type, :null].include?(key) })
+        end
+        spec
+      end
+
       def prepare_column_options(column, options) # :nodoc:
         spec = super
         spec[:unsigned] = 'true' if column.unsigned?
@@ -288,7 +308,7 @@ module ActiveRecord
         options = {
           default: column.default,
           null: column.null,
-          auto_increment: column.extra == "auto_increment"
+          auto_increment: column.auto_increment?
         }
 
         current_type = select_one("SHOW COLUMNS FROM #{quote_table_name(table_name)} LIKE '#{column_name}'", 'SCHEMA')["Type"]
