@@ -6,20 +6,20 @@ class PrimaryKeyBigIntTest < ActiveRecord::TestCase
 
   setup do
     @connection = ActiveRecord::Base.connection
-    @connection.create_table(:widgets, id: :primary_key, limit: 8) { |t| }
+    @connection.create_table(:widgets, id: :bigint, force: true)
   end
 
   teardown do
-    @connection.drop_table :widgets
+    @connection.execute("DROP TABLE IF EXISTS widgets")
   end
 
-  def test_bigint_primary_key
-    assert_equal "id", Widget.primary_key
+  test "primary key column type with bigint" do
+    column_type = Widget.type_for_attribute(Widget.primary_key)
+    assert_equal :integer, column_type.type
+    assert_equal 8, column_type.limit
+  end
 
-    column = Widget.columns_hash[Widget.primary_key]
-    assert_equal :integer, column.type
-    assert_equal 8, column.limit
-
+  test "primary key with bigint are automatically numbered" do
     widget = Widget.create!
     assert_not_nil widget.id
   end

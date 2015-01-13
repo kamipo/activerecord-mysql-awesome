@@ -147,6 +147,11 @@ module ActiveRecord
           @as = as
         end
 
+        def primary_key(name, type = :primary_key, options = {})
+          options[:auto_increment] ||= type == :bigint
+          super
+        end
+
         def new_column_definition(name, type, options) # :nodoc:
           column = super
           column.auto_increment = options[:auto_increment]
