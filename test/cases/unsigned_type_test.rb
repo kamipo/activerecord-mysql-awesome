@@ -26,7 +26,7 @@ class UnsignedTypeTest < ActiveRecord::TestCase
   end
 
   test "minus value is out of range" do
-    assert_raise(RangeError) do
+    assert_raise(ActiveRecord::StatementInvalid, RangeError) do
       UnsignedType.create(unsigned_integer: -10)
     end
     assert_raise(ActiveRecord::StatementInvalid) do
