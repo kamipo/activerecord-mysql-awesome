@@ -80,6 +80,12 @@ class DateTimePrecisionTest < ActiveRecord::TestCase
     assert_match %r{t\.datetime\s+"updated_at",\s+precision: 6,\s+null: false$}, output
   end
 
+  def test_datetime_column_with_default_in_string_works
+    @connection.create_table(:foos, force: true)
+    @connection.add_column :foos, :default_at, :datetime, default: "2015-01-02 03:04:05"
+    assert_equal "2015-01-02 03:04:05", activerecord_column_option('foos', 'default_at', 'default')
+  end
+
   private
 
   def database_datetime_precision(table_name, column_name)
