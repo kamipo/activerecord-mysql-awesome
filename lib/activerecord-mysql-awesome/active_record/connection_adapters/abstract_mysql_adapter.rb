@@ -108,35 +108,36 @@ module ActiveRecord
         end
       end
 
-      if ActiveRecord::VERSION::STRING < "4.2.0"
-        def quote(value, column = nil) #:nodoc:
-          return super unless column && column.type
+      def quote(value, column = nil)
+        return super unless column && /time/ === column.sql_type
 
-          case column.type
-          when :datetime, :time
-            if value.acts_like?(:time) && value.respond_to?(:usec)
-              zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
-              value = value.send(zone_conversion_method) if value.respond_to?(zone_conversion_method)
-              result = value.to_s(:db)
-              precision = column.precision
-              case precision
-              when 1..6
-                "'#{result}.#{sprintf("%0#{precision}d", value.usec / 10**(6 - precision))}'"
-              else
-                "'#{result}'"
-              end
-            else
-              super
-            end
-          else
-            super
+        if value.acts_like?(:time)
+          zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
+
+          if value.respond_to?(zone_conversion_method)
+            value = value.send(zone_conversion_method)
           end
         end
 
+        if (precision = column.precision) && value.respond_to?(:usec)
+          number_of_insignificant_digits = 6 - precision
+          round_power = 10 ** number_of_insignificant_digits
+          value = value.change(usec: value.usec / round_power * round_power)
+        end
+
+        result = value.to_s(:db)
+        if value.respond_to?(:usec) && value.usec > 0
+          "'#{result}.#{sprintf("%06d", value.usec)}'"
+        else
+          "'#{result}'"
+        end
+      end
+
+      if ActiveRecord::VERSION::STRING < "4.2.0"
         module Column
           def extract_limit(sql_type)
             case sql_type
-            when /^(?:date)?time/i; nil
+            when /time/i; nil
             else
               super
             end
@@ -144,8 +145,12 @@ module ActiveRecord
 
           def extract_precision(sql_type)
             case sql_type
-            when /^(?:date)?time/i
-              $1.to_i if sql_type =~ /\((\d+)(,\d+)?\)/
+            when /time/i
+              if sql_type =~ /\((\d+)(,\d+)?\)/
+                $1.to_i
+              else
+                0
+              end
             else
               super
             end
@@ -156,8 +161,8 @@ module ActiveRecord
 
         def initialize_type_map(m) # :nodoc:
           super
-          register_class_with_precision m, %r(time)i,     MysqlTime
-          register_class_with_precision m, %r(datetime)i, MysqlDateTime
+          register_class_with_precision m, %r(time)i,     Type::Time
+          register_class_with_precision m, %r(datetime)i, Type::DateTime
         end
 
         def register_class_with_precision(mapping, key, klass) # :nodoc:
@@ -167,36 +172,20 @@ module ActiveRecord
           end
         end
 
-        private
-
-        module TimeValueWithPrecision
-          def type_cast_for_database(value)
-            if value.acts_like?(:time) && value.respond_to?(:usec)
-              zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
-              value = value.send(zone_conversion_method) if value.respond_to?(zone_conversion_method)
-              result = value.to_s(:db)
-              case precision
-              when 1..6
-                "#{result}.#{sprintf("%0#{precision}d", value.usec / 10**(6 - precision))}"
-              else
-                result
-              end
-            else
-              super
-            end
+        def extract_precision(sql_type)
+          if /time/ === sql_type
+            super || 0
+          else
+            super
           end
-        end
-
-        class MysqlTime < Type::Time # :nodoc:
-          include TimeValueWithPrecision
-        end
-
-        class MysqlDateTime < Type::DateTime # :nodoc:
-          include TimeValueWithPrecision
         end
       end
 
       public
+
+      def supports_datetime_with_precision?
+        (version[0] == 5 && version[1] >= 6) || version[0] >= 6
+      end
 
       def type_to_sql(type, limit = nil, precision = nil, scale = nil, unsigned = false)
         return "#{type_to_sql(type, limit, precision, scale)} unsigned" if unsigned && type != :primary_key
@@ -210,12 +199,10 @@ module ActiveRecord
         when 'primary_key'
           "#{type_to_sql(:integer, limit, precision, scale, unsigned)} auto_increment PRIMARY KEY"
         when 'datetime', 'time'
-          return super(type, limit, precision, scale) unless precision
-
-          native_type = native_database_types[type.to_sym][:name]
           case precision
-          when 0..6; "#{native_type}(#{precision})"
-          else raise(ActiveRecordError, "No #{native_type} type has precision of #{precision}. The allowed range of precision is from 0 to 6")
+          when nil; super(type, limit, precision, scale)
+          when 0..6; "#{type}(#{precision})"
+          else raise(ActiveRecordError, "No #{type} type has precision of #{precision}. The allowed range of precision is from 0 to 6")
           end
         else
           super(type, limit, precision, scale)
@@ -244,6 +231,8 @@ module ActiveRecord
 
       def prepare_column_options(column, options) # :nodoc:
         spec = super
+        spec.delete(:precision) if /time/ === column.sql_type && column.precision == 0
+        spec.delete(:limit) if :boolean === column.type
         spec[:unsigned] = 'true' if column.unsigned?
         if column.collation && column.collation != options[:collation]
           spec[:collation] = column.collation.inspect
@@ -264,6 +253,12 @@ module ActiveRecord
         # strip AUTO_INCREMENT
         raw_table_options.sub(/(ENGINE=\w+)(?: AUTO_INCREMENT=\d+)/, '\1')
       end
+
+      def drop_table(table_name, options = {})
+        execute "DROP#{' TEMPORARY' if options[:temporary]} TABLE#{' IF EXISTS' if options[:if_exists]} #{quote_table_name(table_name)}#{' CASCADE' if options[:force] == :cascade}"
+      end
+
+      protected
 
       def add_column_sql(table_name, column_name, type, options = {})
         td = create_table_definition(table_name)
