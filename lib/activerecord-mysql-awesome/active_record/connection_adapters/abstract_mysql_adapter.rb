@@ -133,6 +133,7 @@ module ActiveRecord
       end
 
       def quote(value, column = nil)
+        return super if value.nil?
         return super unless column && /time/ === column.sql_type
 
         if value.acts_like?(:time)
