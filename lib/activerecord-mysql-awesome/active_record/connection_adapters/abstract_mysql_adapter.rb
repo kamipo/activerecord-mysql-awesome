@@ -3,7 +3,18 @@ require 'active_record/connection_adapters/abstract_mysql_adapter'
 module ActiveRecord
   module Mysql
     module Awesome
-      class ChangeColumnDefinition < Struct.new(:column, :name) #:nodoc:
+      class ChangeColumnDefinition < Struct.new(:column, :name)
+      end
+
+      module ColumnMethods
+        def primary_key(name, type = :primary_key, **options)
+          options[:auto_increment] = true if type == :bigint
+          super
+        end
+
+        def unsigned_integer(*args, **options)
+          args.each { |name| column(name, :unsigned_integer, options) }
+        end
       end
 
       class ColumnDefinition < ActiveRecord::ConnectionAdapters::ColumnDefinition
@@ -11,21 +22,26 @@ module ActiveRecord
       end
 
       class TableDefinition < ActiveRecord::ConnectionAdapters::TableDefinition
+        include ColumnMethods
+
         def initialize(types, name, temporary, options, as = nil)
           super(types, name, temporary, options)
           @as = as
         end
 
-        def primary_key(name, type = :primary_key, options = {})
-          options[:auto_increment] ||= type == :bigint
-          super
-        end
-
-        def new_column_definition(name, type, options) # :nodoc:
+        def new_column_definition(name, type, options)
           column = super
-          column.auto_increment = options[:auto_increment]
-          column.unsigned  = options[:unsigned]
-          column.charset   = options[:charset]
+          case column.type
+          when :primary_key
+            column.type = :integer
+            column.auto_increment = true
+          when :unsigned_integer
+            column.type = :integer
+            column.unsigned = true
+          end
+          column.auto_increment ||= options[:auto_increment]
+          column.unsigned ||= options[:unsigned]
+          column.charset = options[:charset]
           column.collation = options[:collation]
           column
         end
@@ -35,6 +51,10 @@ module ActiveRecord
         def create_column_definition(name, type)
           ColumnDefinition.new(name, type)
         end
+      end
+
+      class Table < ActiveRecord::ConnectionAdapters::Table
+        include ColumnMethods
       end
 
       module SchemaCreation
@@ -89,9 +109,13 @@ module ActiveRecord
           sql
         end
 
-        def type_to_sql(type, limit, precision, scale, unsigned = false)
+        def type_to_sql(type, limit, precision, scale, unsigned)
           @conn.type_to_sql(type.to_sym, limit, precision, scale, unsigned)
         end
+      end
+
+      def update_table_definition(table_name, base)
+        Table.new(table_name, base)
       end
 
       module Column
@@ -188,17 +212,14 @@ module ActiveRecord
       end
 
       def type_to_sql(type, limit = nil, precision = nil, scale = nil, unsigned = false)
-        return "#{type_to_sql(type, limit, precision, scale)} unsigned" if unsigned && type != :primary_key
-        case type.to_s
-        when 'integer'
+        sql = case type
+        when :integer
           case limit
           when nil, 4, 11; 'int'  # compatibility with MySQL default
           else
             super(type, limit, precision, scale)
           end
-        when 'primary_key'
-          "#{type_to_sql(:integer, limit, precision, scale, unsigned)} auto_increment PRIMARY KEY"
-        when 'datetime', 'time'
+        when :datetime, :time
           case precision
           when nil; super(type, limit, precision, scale)
           when 0..6; "#{type}(#{precision})"
@@ -207,6 +228,9 @@ module ActiveRecord
         else
           super(type, limit, precision, scale)
         end
+
+        sql << ' unsigned' if unsigned && type != :primary_key
+        sql
       end
 
       def options_for_column_spec(table_name)
@@ -220,8 +244,9 @@ module ActiveRecord
       def column_spec_for_primary_key(column, options)
         spec = {}
         if column.auto_increment?
-          return unless column.bigint?
-          spec[:id] = ':bigint'
+          spec[:id] = ':bigint' if column.bigint?
+          spec[:unsigned] = 'true' if column.unsigned?
+          return if spec.empty?
         else
           spec[:id] = column.type.inspect
           spec.merge!(prepare_column_options(column, options).delete_if { |key, _| [:name, :type, :null].include?(key) })
