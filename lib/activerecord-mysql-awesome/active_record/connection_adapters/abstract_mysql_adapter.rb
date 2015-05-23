@@ -273,6 +273,8 @@ module ActiveRecord
       def table_options(table_name)
         create_table_info = select_one("SHOW CREATE TABLE #{quote_table_name(table_name)}")["Create Table"]
 
+        return unless create_table_info
+
         # strip create_definitions and partition_options
         raw_table_options = create_table_info.sub(/\A.*\n\) /m, '').sub(/\n\/\*!.*\*\/\n\z/m, '').strip
 
