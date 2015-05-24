@@ -282,6 +282,10 @@ module ActiveRecord
         raw_table_options.sub(/(ENGINE=\w+)(?: AUTO_INCREMENT=\d+)/, '\1')
       end
 
+      def change_table_options(table_name, table_options)
+        execute "ALTER TABLE #{quote_table_name(table_name)} #{table_options}"
+      end
+
       def drop_table(table_name, options = {})
         execute "DROP#{' TEMPORARY' if options[:temporary]} TABLE#{' IF EXISTS' if options[:if_exists]} #{quote_table_name(table_name)}#{' CASCADE' if options[:force] == :cascade}"
       end
