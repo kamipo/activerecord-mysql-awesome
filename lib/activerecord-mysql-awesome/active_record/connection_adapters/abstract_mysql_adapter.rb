@@ -208,26 +208,6 @@ module ActiveRecord
 
       public
 
-      class Version
-        include Comparable
-
-        def initialize(version_string)
-          @version = version_string.split('.').map(&:to_i)
-        end
-
-        def <=>(version_string)
-          @version <=> version_string.split('.').map(&:to_i)
-        end
-
-        def [](index)
-          @version[index]
-        end
-      end
-
-      def version
-        @version ||= Version.new(full_version.match(/^\d+\.\d+\.\d+/)[0])
-      end
-
       def supports_datetime_with_precision?
         version >= '5.6.4'
       end
