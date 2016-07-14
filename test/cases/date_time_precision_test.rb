@@ -83,7 +83,7 @@ class DateTimePrecisionTest < ActiveRecord::TestCase
   def test_datetime_column_with_default_in_string_works
     @connection.create_table(:foos, force: true)
     @connection.add_column :foos, :default_at, :datetime, default: "2015-01-02 03:04:05"
-    assert_equal "2015-01-02 03:04:05", activerecord_column_option('foos', 'default_at', 'default')
+    assert_match %r{2015-01-02 03:04:05}, activerecord_column_option('foos', 'default_at', 'default').to_s
   end
 
   private
